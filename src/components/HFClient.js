@@ -1,7 +1,8 @@
 'use client';
 
-export async function callHF(path, { method = 'GET', headers = {}, body } = {}) {
-  const url = `/api/hf?path=${encodeURIComponent(path)}`;
+export async function callHF(path, { method = 'GET', headers = {}, body, basePath } = {}) {
+  const effectivePath = basePath ? `${basePath}${path || ''}` : (path || '');
+  const url = `/api/hf?path=${encodeURIComponent(effectivePath)}`;
 
   const init = { method, headers: { ...headers } };
   if (body !== undefined) {
@@ -16,9 +17,13 @@ export async function callHF(path, { method = 'GET', headers = {}, body } = {}) 
   const resp = await fetch(url, init);
   const contentType = resp.headers.get('content-type') || '';
   if (!resp.ok) {
-    let detail = await resp.text().catch(() => '');
-    try { detail = JSON.parse(detail); } catch {}
-    throw new Error(`HF error ${resp.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    let detail;
+    try {
+      detail = contentType.includes('application/json') ? await resp.json() : await resp.text();
+    } catch {
+      detail = await resp.text().catch(() => '');
+    }
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
   }
 
   if (contentType.includes('application/json')) {

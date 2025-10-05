@@ -4,6 +4,7 @@
 // Configure base URL via process.env.HF_SPACE_BASE. Example: HF_SPACE_BASE="https://jesus1558-Nubira.hf.space"
 
 const HF_SPACE_BASE = process.env.HF_SPACE_BASE;
+const HF_DEFAULT_PATH = process.env.HF_DEFAULT_PATH || '/clima';
 
 async function forward(request, method) {
   if (!HF_SPACE_BASE) {
@@ -14,7 +15,7 @@ async function forward(request, method) {
   }
 
   const { searchParams } = new URL(request.url);
-  const path = searchParams.get('path') || '';
+  const path = searchParams.get('path') || HF_DEFAULT_PATH;
   const targetUrl = new URL(path, HF_SPACE_BASE).toString();
 
   const headers = new Headers(request.headers);
@@ -47,20 +48,39 @@ async function forward(request, method) {
   try {
     const resp = await fetch(targetUrl, init);
 
-    // Stream back as-is
-    const respHeaders = new Headers(resp.headers);
-    // Avoid setting forbidden headers in Next.js response
-    respHeaders.delete('content-encoding');
-    respHeaders.delete('transfer-encoding');
-    respHeaders.delete('connection');
+    // If OK, stream back as-is
+    if (resp.ok) {
+      const okHeaders = new Headers(resp.headers);
+      okHeaders.delete('content-encoding');
+      okHeaders.delete('transfer-encoding');
+      okHeaders.delete('connection');
+      return new Response(resp.body, { status: resp.status, headers: okHeaders });
+    }
 
-    return new Response(resp.body, {
-      status: resp.status,
-      headers: respHeaders,
+    // On error, try to capture upstream payload for debugging
+    const contentType = resp.headers.get('content-type') || '';
+    let payload;
+    try {
+      payload = contentType.includes('application/json') ? await resp.json() : await resp.text();
+    } catch {
+      payload = await resp.text().catch(() => '');
+    }
+
+    const errorBody = {
+      error: 'Upstream error',
+      upstreamStatus: resp.status,
+      upstreamUrl: targetUrl,
+      method,
+      payload,
+    };
+
+    return new Response(JSON.stringify(errorBody), {
+      status: 502,
+      headers: { 'content-type': 'application/json' },
     });
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: 'Proxy error', detail: String(err) }),
+      JSON.stringify({ error: 'Proxy error', detail: String(err), targetUrl, method }),
       { status: 502, headers: { 'content-type': 'application/json' } }
     );
   }
