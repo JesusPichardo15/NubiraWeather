@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 export default function LocationsPage() {
   const [locations, setLocations] = useState([]);
@@ -80,12 +81,12 @@ export default function LocationsPage() {
         )}
 
         <div className="mt-8">
-          <a 
+          <Link 
             href="/"
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             ← Volver al Mapa
-          </a>
+          </Link>
         </div>
       </div>
     </div>

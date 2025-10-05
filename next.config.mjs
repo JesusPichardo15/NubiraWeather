@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    images: {
+  // Help Next.js correctly identify the workspace root when multiple lockfiles exist
+  outputFileTracingRoot: process.cwd(),
+  images: {
     domains: ['cdnjs.cloudflare.com'],
   },
   webpack: (config) => {

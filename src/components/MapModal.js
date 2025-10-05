@@ -1,7 +1,7 @@
 // src/components/MapModal.js
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function MapModal({ isOpen, onClose, onLocationSelect }) {
   const [selectedPosition, setSelectedPosition] = useState(null);
@@ -35,7 +35,7 @@ export default function MapModal({ isOpen, onClose, onLocationSelect }) {
     event.preventDefault();
   };
 
-  const handleMouseMove = (event) => {
+  const handleMouseMove = useCallback((event) => {
     if (!isDragging) return;
     
     const newOffset = {
@@ -51,7 +51,7 @@ export default function MapModal({ isOpen, onClose, onLocationSelect }) {
     setDragDistance(prev => prev + distance);
     
     setOffset(newOffset);
-  };
+  }, [isDragging, dragStart, offset.x, offset.y]);
 
   const handleMouseUp = () => {
     setIsDragging(false);
@@ -170,7 +170,7 @@ export default function MapModal({ isOpen, onClose, onLocationSelect }) {
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'default';
     };
-  }, [isDragging, dragStart]);
+  }, [isDragging, dragStart, handleMouseMove]);
 
   // Calcular posición precisa del marcador
   const getMarkerPosition = () => {
@@ -366,7 +366,7 @@ export default function MapModal({ isOpen, onClose, onLocationSelect }) {
               </div>
               <div className="mt-3 p-3 bg-green-100 rounded border border-green-200">
                 <div className="text-sm text-green-800 font-medium">
-                  ✅ Haz click en <strong>"Confirmar Ubicación"</strong> para guardar esta ubicación precisa
+                  ✅ Haz click en <strong>&quot;Confirmar Ubicación&quot;</strong> para guardar esta ubicación precisa
                 </div>
                 <div className="text-xs text-green-600 mt-1">
                   • Precisión: Alta • Coordenadas exactas • Dirección verificada

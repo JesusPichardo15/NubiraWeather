@@ -74,9 +74,10 @@ export default function ThreePlanets() {
     window.addEventListener('resize', handleResize);
 
     return () => {
+      const container = mountRef.current; // capture ref value at cleanup time
       window.removeEventListener('resize', handleResize);
-      if (mountRef.current) {
-        mountRef.current.removeChild(renderer.domElement);
+      if (container) {
+        container.removeChild(renderer.domElement);
       }
     };
   }, []);
