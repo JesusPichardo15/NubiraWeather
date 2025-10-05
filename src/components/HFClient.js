@@ -1,8 +1,10 @@
 'use client';
 
-export async function callHF(path, { method = 'GET', headers = {}, body, basePath } = {}) {
-  const effectivePath = basePath ? `${basePath}${path || ''}` : (path || '');
-  const url = `/api/hf?path=${encodeURIComponent(effectivePath)}`;
+export async function callHF(pathOrUrl, { method = 'GET', headers = {}, body, basePath, absoluteUrl } = {}) {
+  const urlParam = absoluteUrl || (pathOrUrl && /^(https?:)\/\//i.test(pathOrUrl) ? pathOrUrl : undefined);
+  const effectivePath = !urlParam ? (basePath ? `${basePath}${pathOrUrl || ''}` : (pathOrUrl || '')) : '';
+  const query = urlParam ? `url=${encodeURIComponent(urlParam)}` : `path=${encodeURIComponent(effectivePath)}`;
+  const url = `/api/hf?${query}`;
 
   const init = { method, headers: { ...headers } };
   // Do not set token here; token is injected server-side by the proxy via env

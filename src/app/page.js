@@ -34,7 +34,7 @@ export default function HomePage() {
         year = dateObj.getFullYear();
       }
 
-      const result = await callHF('/clima', {
+      const result = await callHF('https://jesus155nubira.hf.space/clima', {
         method: 'POST',
         body: {
           latitude: location.lat,
