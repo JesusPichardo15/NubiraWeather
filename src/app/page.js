@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { callHF } from '../components/HFClient';
 import ProfessionalMapModal from '../components/ProfessionalMapModal';
 
 export default function HomePage() {
@@ -33,25 +34,16 @@ export default function HomePage() {
         year = dateObj.getFullYear();
       }
 
-      const response = await fetch('http://localhost:8000/clima', {
+      const result = await callHF('/clima', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           latitude: location.lat,
           longitude: location.lng,
           day: day,
           month: month,
           year: year
-        })
+        }
       });
-
-      if (!response.ok) {
-        throw new Error('Error sending location to server');
-      }
-
-      const result = await response.json();
       console.log('📍 Location sent successfully:', result);
       
     } catch (error) {
