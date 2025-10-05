@@ -5,6 +5,7 @@ export async function callHF(path, { method = 'GET', headers = {}, body, basePat
   const url = `/api/hf?path=${encodeURIComponent(effectivePath)}`;
 
   const init = { method, headers: { ...headers } };
+  // Do not set token here; token is injected server-side by the proxy via env
   if (body !== undefined) {
     if (typeof body === 'object' && !(body instanceof FormData) && !init.headers['content-type']) {
       init.headers['content-type'] = 'application/json';

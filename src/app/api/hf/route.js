@@ -3,8 +3,10 @@
 // Generic proxy to forward requests to a Hugging Face Space (e.g., https://jesus1558-Nubira.hf.space)
 // Configure base URL via process.env.HF_SPACE_BASE. Example: HF_SPACE_BASE="https://jesus1558-Nubira.hf.space"
 
-const HF_SPACE_BASE = process.env.HF_SPACE_BASE;
+// Prefer env, but default to your provided Space URL if not set
+const HF_SPACE_BASE = process.env.HF_SPACE_BASE || 'https://jesus1558-nubira.hf.space';
 const HF_DEFAULT_PATH = process.env.HF_DEFAULT_PATH || '/clima';
+const HF_TOKEN = process.env.HF_TOKEN; // Set this to your provided token
 
 async function forward(request, method) {
   if (!HF_SPACE_BASE) {
@@ -22,6 +24,9 @@ async function forward(request, method) {
   headers.delete('host');
   headers.delete('connection');
   headers.set('accept', headers.get('accept') || 'application/json');
+  if (HF_TOKEN && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${HF_TOKEN}`);
+  }
 
   const init = { method, headers };
 
