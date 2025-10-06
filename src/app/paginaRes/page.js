@@ -144,21 +144,49 @@ const EnhancedWeatherPage = () => {
   };
 
   useEffect(() => {
-    const updateWeatherData = () => {
-      const newData = simulateBackendData();
-      setMinTemperature(newData.minTemp);
-      setMaxTemperature(newData.maxTemp);
-      setPrecipitation(newData.precip);
-      setWindSpeed(newData.wind);
-      setAddress(newData.address);
-      setWeatherType(getWeatherTypeFromConditions(newData.minTemp, newData.maxTemp, newData.precip, newData.wind));
-      setSampleCount(prev => prev + 1);
-      setWeatherHistory(prev => [...prev, newData]);
+    let isMounted = true;
+
+    const loadLast = async () => {
+      try {
+        const resp = await fetch('/api/weather/last');
+        if (!resp.ok) throw new Error('no last weather');
+        const payload = await resp.json();
+        const p = payload.prediction || payload;
+        if (!p) return;
+
+        const minTemp = Math.round(Number(p.temp_min));
+        const maxTemp = Math.round(Number(p.temp_max));
+        const precip = Math.round(Number(p.precipitacion));
+        const wind = Math.round(Number(p.vel_viento));
+        const addr = p.location?.address || 'Selected location';
+
+        if (!isMounted) return;
+        setMinTemperature(minTemp);
+        setMaxTemperature(maxTemp);
+        setPrecipitation(precip);
+        setWindSpeed(wind);
+        setAddress(addr);
+        setWeatherType(getWeatherTypeFromConditions(minTemp, maxTemp, precip, wind));
+        setWeatherHistory(prev => [...prev, { minTemp, maxTemp, precip, wind, address: addr, id: Date.now(), timestamp: new Date().toLocaleTimeString() }]);
+        setSampleCount(prev => prev + 1);
+      } catch (e) {
+        // fallback to simulated data
+        const newData = simulateBackendData();
+        if (!isMounted) return;
+        setMinTemperature(newData.minTemp);
+        setMaxTemperature(newData.maxTemp);
+        setPrecipitation(newData.precip);
+        setWindSpeed(newData.wind);
+        setAddress(newData.address);
+        setWeatherType(getWeatherTypeFromConditions(newData.minTemp, newData.maxTemp, newData.precip, newData.wind));
+        setSampleCount(prev => prev + 1);
+        setWeatherHistory(prev => [...prev, newData]);
+      }
     };
 
-    updateWeatherData();
-    const interval = setInterval(updateWeatherData, 5000);
-    return () => clearInterval(interval);
+    loadLast();
+    const interval = setInterval(loadLast, 5000);
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
   const weatherConfig = {

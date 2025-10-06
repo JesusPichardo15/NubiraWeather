@@ -4,7 +4,8 @@
 // Configure base URL via process.env.HF_SPACE_BASE. Example: HF_SPACE_BASE="https://jesus1558-Nubira.hf.space"
 
 // Prefer env, but default to your provided Space URL if not set
-const HF_SPACE_BASE = process.env.HF_SPACE_BASE || 'https://jesus155nubira.hf.space';
+// NOTE: Default fixed to the correct Space URL
+const HF_SPACE_BASE = process.env.HF_SPACE_BASE || 'https://jesus1558-nubira.hf.space';
 const HF_DEFAULT_PATH = process.env.HF_DEFAULT_PATH || '/clima';
 const HF_TOKEN = process.env.HF_TOKEN; // Set this to your provided token
 

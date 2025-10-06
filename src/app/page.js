@@ -22,60 +22,44 @@ export default function HomePage() {
   const sendLocationToServer = async (location) => {
     setIsLoading(true);
     try {
-      // Procesar la fecha para dividirla en día, mes y año
+      // Parse date
       let day = null;
       let month = null;
       let year = null;
-
       if (location.date) {
         const dateObj = new Date(location.date + 'T00:00:00');
         day = dateObj.getDate();
-        month = dateObj.getMonth() + 1; // Los meses van de 0 a 11, así que sumamos 1
+        month = dateObj.getMonth() + 1;
         year = dateObj.getFullYear();
       }
 
-      // Simulate weather prediction directly in the component
-      // This provides immediate working functionality
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000)); // Simulate processing time
-      
-      // Generate realistic weather data based on location and date
-      const baseTemp = 20 + Math.sin(location.lat * Math.PI / 180) * 15;
-      const seasonalVariation = month ? Math.sin((month - 1) * Math.PI / 6) * 10 : 0;
-      const dayVariation = day ? Math.sin(day * Math.PI / 15) * 5 : 0;
-      
-      const tempMax = Math.round((baseTemp + seasonalVariation + dayVariation + Math.random() * 5) * 10) / 10;
-      const tempMin = Math.round((tempMax - 8 - Math.random() * 5) * 10) / 10;
-      
-      const precipitationChance = Math.abs(Math.sin(location.lat * Math.PI / 180)) * 0.3 + 
-                                  (month ? Math.abs(Math.sin((month - 1) * Math.PI / 6)) * 0.2 : 0) + 
-                                  Math.random() * 0.3;
-      const precipitation = Math.round(precipitationChance * 20 * 10) / 10;
-      
-      const windSpeed = Math.round((5 + Math.random() * 15 + Math.abs(Math.sin(location.lng * Math.PI / 180)) * 5) * 10) / 10;
-
-      const result = {
-        temp_max: tempMax,
-        temp_min: tempMin,
-        precipitacion: precipitation,
-        vel_viento: windSpeed,
-        location: {
+      // Call our server API that forwards to HF
+      const resp = await fetch('/api/weather', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
           latitude: location.lat,
           longitude: location.lng,
           day: day || 15,
           month: month || 6,
           year: year || 2025
-        },
-        prediction_date: new Date().toISOString(),
-        model_version: '1.0.0'
-      };
+        })
+      });
+      const prediction = await resp.json();
 
-      console.log('📍 Weather prediction generated:', result);
-      
-      // Store weather prediction in the location object
-      setSelectedLocation(prev => ({
-        ...prev,
-        weatherPrediction: result
-      }));
+      // Persist last prediction
+      try {
+        await fetch('/api/weather/last', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prediction })
+        });
+      } catch (e) {
+        console.warn('Could not persist last weather prediction', e);
+      }
+
+      // Update UI
+      setSelectedLocation(prev => ({ ...prev, weatherPrediction: prediction }));
       
     } catch (error) {
       console.error('❌ Error generating weather prediction:', error);
