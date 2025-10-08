@@ -34,31 +34,9 @@ export default function HomePage() {
         year = dateObj.getFullYear();
       }
 
-      // Simulate weather prediction directly in the component
-      // This provides immediate working functionality
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000)); // Simulate processing time
-      
-      // Generate realistic weather data based on location and date
-      const baseTemp = 20 + Math.sin(location.lat * Math.PI / 180) * 15;
-      const seasonalVariation = month ? Math.sin((month - 1) * Math.PI / 6) * 10 : 0;
-      const dayVariation = day ? Math.sin(day * Math.PI / 15) * 5 : 0;
-      
-      const tempMax = Math.round((baseTemp + seasonalVariation + dayVariation + Math.random() * 5) * 10) / 10;
-      const tempMin = Math.round((tempMax - 8 - Math.random() * 5) * 10) / 10;
-      
-      const precipitationChance = Math.abs(Math.sin(location.lat * Math.PI / 180)) * 0.3 + 
-                                  (month ? Math.abs(Math.sin((month - 1) * Math.PI / 6)) * 0.2 : 0) + 
-                                  Math.random() * 0.3;
-      const precipitation = Math.round(precipitationChance * 20 * 10) / 10;
-      
-      const windSpeed = Math.round((5 + Math.random() * 15 + Math.abs(Math.sin(location.lng * Math.PI / 180)) * 5) * 10) / 10;
-
-      const result = {
-        temp_max: tempMax,
-        temp_min: tempMin,
-        precipitacion: precipitation,
-        vel_viento: windSpeed,
-        location: {
+      const result = await callHF('https://jesus1558-nubira.hf.space/clima', {
+        method: 'POST',
+        body: {
           latitude: location.lat,
           longitude: location.lng,
           day: day || 15,
@@ -67,7 +45,7 @@ export default function HomePage() {
         },
         prediction_date: new Date().toISOString(),
         model_version: '1.0.0'
-      };
+      });
 
       console.log('📍 Weather prediction generated:', result);
       
