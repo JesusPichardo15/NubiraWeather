@@ -1,29 +1,12 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import "leaflet/dist/leaflet.css";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import SiteShell from "@/components/SiteShell";
 
 export const metadata = {
-  title: "Nubira",
-  description: "Nubira",
+  title: { default: "Nubira Weather | Planifica tu evento", template: "%s | Nubira Weather" },
+  description: "Evalúa el riesgo climático histórico de tu evento al aire libre antes de elegir una sede o fecha.",
 };
 
 export default function RootLayout({ children }) {
-  return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
-    </html>
-  );
+  return <html lang="es-MX"><body><SiteShell>{children}</SiteShell></body></html>;
 }
