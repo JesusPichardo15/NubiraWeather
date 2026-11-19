@@ -5,6 +5,8 @@ import { divIcon } from "leaflet";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 
 const tiles = process.env.NEXT_PUBLIC_NUBIRA_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const geoapifyAttributionText = ' | Powered by <a href="https://www.geoapify.com/">Geoapify</a>';
 const icon = divIcon({
   className: "venue-pin",
   html: '<span></span>',
@@ -32,10 +34,10 @@ function MapControls({ position, focus, onPick }) {
     title="Ubicación seleccionada" alt="Ubicación seleccionada" />;
 }
 
-export default function LocationMap({ position, focus, onPick, onTileError }) {
+export default function LocationMap({ position, focus, onPick, onTileError, geoapifyAttribution }) {
   return <MapContainer center={[23.6, -102.5]} zoom={5} scrollWheelZoom
     className="venue-map" aria-label="Mapa de ubicación del evento">
-    <TileLayer url={tiles} attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    <TileLayer url={tiles} attribution={osmAttribution + (geoapifyAttribution ? geoapifyAttributionText : "")}
       eventHandlers={{ tileerror: onTileError }} />
     <MapControls position={position} focus={focus} onPick={onPick} />
   </MapContainer>;

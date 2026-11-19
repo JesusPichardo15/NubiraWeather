@@ -11,6 +11,8 @@ Abre `http://localhost:3000`. Por defecto Next.js apunta a `http://127.0.0.1:786
 
 El mapa viene con teselas de OpenStreetMap y permite acercar o alejar con la rueda, el gesto táctil o los botones. Para otro proveedor de teselas conserva la atribución requerida; puedes cambiar la URL en tiempo de compilación con `NEXT_PUBLIC_NUBIRA_TILE_URL`. Las sugerencias de direcciones requieren `NUBIRA_GEOAPIFY_API_KEY` en el backend, no en Next.js. El mapa y la entrada manual de coordenadas siguen disponibles sin esa clave; las coordenadas también se pueden escribir si las teselas no cargan.
 
+Cuando el backend tiene esa clave, un clic en el mapa también rellena el campo con la dirección más cercana. Esto no cambia el marcador ni las coordenadas seleccionadas.
+
 ## Verificación
 
 ```sh

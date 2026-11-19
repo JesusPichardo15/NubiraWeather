@@ -7,16 +7,16 @@ import Icon from "./Icon";
 const MIN_QUERY = 4;
 const SEARCH_DELAY_MS = 350;
 
-function AddressAutocomplete({ onPick, disabled }) {
+function AddressAutocomplete({ onPick, disabled, address, onAddressChange }) {
   const id = useId();
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(false);
   const [composing, setComposing] = useState(false);
   const [active, setActive] = useState(-1);
   const [response, setResponse] = useState(null);
+  const { text: query, phase } = address;
+  const typing = phase === "typing";
   const term = query.trim().replace(/\s+/g, " ");
-  const searching = open && !selected && !composing && !disabled && term.length >= MIN_QUERY;
+  const searching = open && typing && !composing && !disabled && term.length >= MIN_QUERY;
   const current = response?.term === term ? response : null;
   const settled = Boolean(current?.options);
   const options = searching ? current?.options || [] : [];
@@ -50,11 +50,9 @@ function AddressAutocomplete({ onPick, disabled }) {
 
   function pick(option) {
     if (disabled || !option) return;
-    setSelected(true);
     setOpen(false);
     setActive(-1);
-    setQuery(option.label);
-    onPick(option.lat, option.lon, option.zoom);
+    onPick(option.lat, option.lon, option.zoom, option.label);
   }
 
   function keyboard(event) {
@@ -64,7 +62,7 @@ function AddressAutocomplete({ onPick, disabled }) {
       setOpen(false);
       setActive(-1);
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      if (selected || term.length < MIN_QUERY) return;
+      if (!typing || term.length < MIN_QUERY) return;
       event.preventDefault();
       setOpen(true);
       const count = current?.options?.length || 0;
@@ -79,17 +77,23 @@ function AddressAutocomplete({ onPick, disabled }) {
     }
   }
 
+  const placeholder = phase === "loading" ? "Buscando dirección…" :
+    phase === "unavailable" ? "Dirección no disponible" : "Calle, número y ciudad";
+  const status = phase === "loading" ? "Buscando la dirección del punto seleccionado." :
+    phase === "unavailable" ? "No encontramos una dirección para el punto seleccionado." :
+    phase === "resolved" ? `Dirección cercana: ${query}.` : expanded ? `${options.length} sugerencias disponibles.` : "";
+
   return <div className="field address-search">
     <label htmlFor={id}>Dirección de la sede</label>
     <div className="address-control">
       <input id={id} type="text" role="combobox" aria-autocomplete="list" aria-expanded={expanded}
         aria-controls={expanded ? listId : undefined}
         aria-activedescendant={expanded && active >= 0 ? `${listId}-${active}` : undefined}
-        aria-describedby={`${id}-hint`} autoComplete="off" maxLength={140} disabled={disabled}
-        placeholder="Calle, número y ciudad" value={query} onKeyDown={keyboard}
+        autoComplete="off" maxLength={140} disabled={disabled}
+        placeholder={placeholder} value={query} onKeyDown={keyboard}
         onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)}
-        onFocus={() => { if (!selected) setOpen(true); }} onBlur={() => { setOpen(false); setActive(-1); }}
-        onChange={({ target }) => { setQuery(target.value); setSelected(false); setOpen(true); setActive(-1); }} />
+        onFocus={() => { if (typing) setOpen(true); }} onBlur={() => { setOpen(false); setActive(-1); }}
+        onChange={({ target }) => { onAddressChange(target.value); setOpen(true); setActive(-1); }} />
       {expanded && <ul className="address-options" role="listbox" id={listId} aria-label="Direcciones sugeridas">
         {options.map((option, index) => <li key={`${option.lat}:${option.lon}:${option.label}`}
           id={`${listId}-${index}`} role="option" aria-selected={active === index}
@@ -98,8 +102,7 @@ function AddressAutocomplete({ onPick, disabled }) {
         </li>)}
       </ul>}
     </div>
-    <p className="field-hint" id={`${id}-hint`}>Elige una sugerencia o ajusta el punto en el mapa. No incluyas datos privados. Sugerencias de <a href="https://www.geoapify.com/">Geoapify</a>.</p>
-    <div className="sr-only" role="status">{expanded ? `${options.length} sugerencias disponibles.` : ""}</div>
+    <div className="sr-only" role="status">{status}</div>
     {searching && !current && <p className="field-hint" role="status">Buscando direcciones…</p>}
     {searching && current?.options?.length === 0 && <p className="field-hint" role="status">No encontramos coincidencias. Prueba con la ciudad y el código postal.</p>}
     {searching && current?.error && <p className="form-error" role="alert">{current.error}</p>}
@@ -146,7 +149,7 @@ function ManualPlaceSearch({ onPick, disabled }) {
   </details>;
 }
 
-export default function PlaceSearch({ onPick, disabled }) {
+export function usePlaceSearchMode() {
   const [mode, setMode] = useState(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -155,8 +158,12 @@ export default function PlaceSearch({ onPick, disabled }) {
     }).catch(() => {});
     return () => controller.abort();
   }, []);
+  return mode;
+}
 
-  if (mode === "autocomplete") return <AddressAutocomplete onPick={onPick} disabled={disabled} />;
+export default function PlaceSearch({ mode, onPick, disabled, address, onAddressChange }) {
+  if (mode === "autocomplete") return <AddressAutocomplete onPick={onPick} disabled={disabled}
+    address={address} onAddressChange={onAddressChange} />;
   if (mode === "manual") return <ManualPlaceSearch onPick={onPick} disabled={disabled} />;
   return null;
 }

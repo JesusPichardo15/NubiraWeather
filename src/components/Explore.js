@@ -9,13 +9,15 @@ import { DRAFT_KEY } from "@/lib/draft";
 import { forecastInput, tomorrow, validPrediction } from "@/lib/weather.mjs";
 import ClimateResults from "./ClimateResults";
 import Icon from "./Icon";
-import PlaceSearch from "./PlaceSearch";
+import PlaceSearch, { usePlaceSearchMode } from "./PlaceSearch";
 import { useSession } from "./SiteShell";
 
 const LocationMap = dynamic(() => import("./LocationMap"), {
   ssr: false,
   loading: () => <div className="map-placeholder" role="status">Cargando mapa…</div>,
 });
+const EMPTY_ADDRESS = { text: "", phase: "idle" };
+
 function SaveEvaluation({ result, setNotice }) {
   const { user, ready, setUser } = useSession();
   const router = useRouter();
@@ -73,7 +75,10 @@ function SaveEvaluation({ result, setNotice }) {
 }
 
 export default function Explore() {
+  const placeMode = usePlaceSearchMode();
   const [coords, setCoords] = useState({ lat: "", lon: "" });
+  const [address, setAddress] = useState(EMPTY_ADDRESS);
+  const [mapPoint, setMapPoint] = useState(null);
   const [date, setDate] = useState("");
   const [minDate, setMinDate] = useState("");
   const [focus, setFocus] = useState(null);
@@ -83,6 +88,7 @@ export default function Explore() {
   const [notice, setNotice] = useState("");
   const [result, setResult] = useState(null);
   const resultAnchor = useRef(null);
+  const reverseRequest = useRef(null);
 
   useEffect(() => {
     setMinDate(tomorrow());
@@ -106,10 +112,63 @@ export default function Explore() {
     if (result) resultAnchor.current?.focus();
   }, [result]);
 
-  function pick(lat, lon) {
-    if (busy) return;
+  useEffect(() => {
+    if (placeMode !== "autocomplete" || !mapPoint) return;
+    const controller = new AbortController();
+    reverseRequest.current = controller;
+    const timer = setTimeout(async () => {
+      if (controller.signal.aborted) return;
+      let label;
+      try {
+        const data = await api("places/reverse", { method: "POST", body: mapPoint, signal: controller.signal });
+        label = typeof data?.label === "string" ? data.label.trim() : "";
+      } catch {
+        // An absent address or provider error must not change the selected point.
+      }
+      if (controller.signal.aborted) return;
+      setAddress(label ? { text: label, phase: "resolved" } : { text: "", phase: "unavailable" });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mapPoint, placeMode]);
+
+  function cancelReverse() {
+    reverseRequest.current?.abort();
+    setMapPoint(null);
+  }
+
+  function setPoint(lat, lon) {
     setCoords({ lat: lat.toFixed(6), lon: lon.toFixed(6) });
     setFormError("");
+  }
+
+  function pickMap(lat, lon) {
+    if (busy) return;
+    cancelReverse();
+    setPoint(lat, lon);
+    setMapPoint({ lat, lon });
+    setAddress({ text: "", phase: "loading" });
+  }
+
+  function pickAddress(lat, lon, zoom, label) {
+    if (busy) return;
+    cancelReverse();
+    setPoint(lat, lon);
+    setFocus({ lat, lon, zoom });
+    setAddress(label ? { text: label, phase: "selected" } : EMPTY_ADDRESS);
+  }
+
+  function editAddress(text) {
+    cancelReverse();
+    setAddress({ text, phase: "typing" });
+  }
+
+  function editCoordinate(name, value) {
+    cancelReverse();
+    setAddress((previous) => previous.phase === "typing" ? previous : EMPTY_ADDRESS);
+    setCoords((previous) => ({ ...previous, [name]: value }));
   }
 
   const lat = Number(coords.lat), lon = Number(coords.lon);
@@ -164,19 +223,19 @@ export default function Explore() {
         <p className="eyebrow"><Icon name="pin" size={17} /> Nueva evaluación</p>
         <h2 id="query-heading">Lugar y fecha</h2>
         <p className="subtle">Elige el punto en el mapa o escribe las coordenadas de tu sede.</p>
-        <PlaceSearch disabled={busy} onPick={(lat, lon, zoom) => { pick(lat, lon); setFocus({ lat, lon, zoom }); }} />
+        <PlaceSearch mode={placeMode} disabled={busy} onPick={pickAddress} address={address} onAddressChange={editAddress} />
         <form onSubmit={run}>
           <fieldset disabled={busy}>
             <div className="field-row">
               <div className="field">
                 <label htmlFor="lat">Latitud</label>
                 <input id="lat" type="number" inputMode="decimal" step="any" min="-90" max="90" required placeholder="Ej. 28.1901"
-                  value={coords.lat} onChange={({ target }) => setCoords((prev) => ({ ...prev, lat: target.value }))} />
+                  value={coords.lat} onChange={({ target }) => editCoordinate("lat", target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="lon">Longitud</label>
                 <input id="lon" type="number" inputMode="decimal" step="any" min="-180" max="180" required placeholder="Ej. −105.4701"
-                  value={coords.lon} onChange={({ target }) => setCoords((prev) => ({ ...prev, lon: target.value }))} />
+                  value={coords.lon} onChange={({ target }) => editCoordinate("lon", target.value)} />
               </div>
             </div>
             <div className="field">
@@ -195,7 +254,8 @@ export default function Explore() {
         <p className="privacy-hint"><Icon name="info" size={17} /> No necesitas una cuenta para consultar.</p>
       </div>
       <div className="workspace-map" role="region" aria-label="Mapa de ubicación del evento">
-        <LocationMap position={position} focus={focus} onPick={pick} onTileError={() => setTileError(true)} />
+        <LocationMap position={position} focus={focus} onPick={pickMap} onTileError={() => setTileError(true)}
+          geoapifyAttribution={placeMode === "autocomplete"} />
         <div className="map-caption"><Icon name="pin" size={17} />
           <span>{tileError ? "Hay teselas no disponibles. Puedes usar las coordenadas manuales." :
             position ? `Ubicación: ${lat.toFixed(4)}, ${lon.toFixed(4)}` : "Selecciona un punto en el mapa"}</span>

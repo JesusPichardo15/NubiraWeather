@@ -77,6 +77,66 @@ test("las sugerencias de dirección se eligen con teclado o ratón y sitúan el 
   expect(queries).toEqual(["Avenida Reforma", "Avenida Universidad"]);
 });
 
+test("los clics conservan las coordenadas y solo muestran la dirección del último punto", async ({ page }) => {
+  await stubTiles(page);
+  await page.route("**/api/places", (route) => route.fulfill({ json: { autocomplete: true, enabled: false } }));
+  let releaseFirst;
+  const firstResponse = new Promise((resolve) => { releaseFirst = resolve; });
+  const reverseCalls = [];
+  const autocompleteCalls = [];
+  await page.route("**/api/places/autocomplete", (route) => {
+    autocompleteCalls.push(route.request().postDataJSON());
+    return route.fulfill({ json: [] });
+  });
+  await page.route("**/api/places/reverse", async (route) => {
+    reverseCalls.push(route.request().postDataJSON());
+    if (reverseCalls.length === 1) {
+      await firstResponse;
+      await route.fulfill({ json: { label: "Dirección anterior" } }).catch(() => {});
+    } else if (reverseCalls.length === 2) {
+      await route.fulfill({ json: { label: "Dirección cercana al último punto" } });
+    } else {
+      await route.fulfill({ json: { label: null } });
+    }
+  });
+
+  try {
+    await page.goto("/");
+    const address = page.getByRole("combobox", { name: "Dirección de la sede" });
+    const map = page.locator(".leaflet-container");
+    const lat = page.getByLabel("Latitud", { exact: true });
+    const lon = page.getByLabel("Longitud", { exact: true });
+    await expect(address).toBeVisible();
+    await expect(page.getByText(/Elige una sugerencia o ajusta el punto en el mapa/)).toHaveCount(0);
+    await expect(map.getByRole("link", { name: "Geoapify", exact: true })).toBeVisible();
+
+    await map.click({ position: { x: 250, y: 110 } });
+    await expect.poll(() => reverseCalls.length).toBe(1);
+    await expect(map.locator(".venue-pin")).toBeVisible();
+    await expect(lat).toHaveValue(reverseCalls[0].lat.toFixed(6));
+    await expect(lon).toHaveValue(reverseCalls[0].lon.toFixed(6));
+    await expect(address).toHaveAttribute("placeholder", "Buscando dirección…");
+
+    await map.click({ position: { x: 360, y: 180 } });
+    await expect(address).toHaveValue("Dirección cercana al último punto");
+    releaseFirst();
+    await expect(lat).toHaveValue(reverseCalls[1].lat.toFixed(6));
+    await expect(lon).toHaveValue(reverseCalls[1].lon.toFixed(6));
+    await expect(address).toHaveValue("Dirección cercana al último punto");
+    await expect(address).toHaveAttribute("aria-expanded", "false");
+
+    await map.click({ position: { x: 380, y: 220 } });
+    await expect(address).toHaveAttribute("placeholder", "Dirección no disponible");
+    await expect(address).toHaveValue("");
+    await expect(lat).toHaveValue(reverseCalls[2].lat.toFixed(6));
+    await expect(lon).toHaveValue(reverseCalls[2].lon.toFixed(6));
+    await expect(map.locator(".venue-pin")).toBeVisible();
+    expect(autocompleteCalls).toEqual([]);
+  } finally {
+    releaseFirst();
+  }
+});
+
 test("cada nivel del semáforo muestra una etiqueta y un color distintos", async ({ page }) => {
   await stubTiles(page);
   await page.route("**/api/weather", (route) => {
