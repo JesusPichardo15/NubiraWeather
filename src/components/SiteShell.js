@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { api } from "@/lib/api";
 import EvaluationDraftProvider from "./EvaluationDraft";
 import Icon from "./Icon";
+import ThemeToggle from "./ThemeToggle";
 
 const Session = createContext(null);
 
@@ -44,6 +45,7 @@ export default function SiteShell({ children }) {
           <Link className="account-nav" href="/cuenta" aria-current={pathname.startsWith("/cuenta") ? "page" : undefined}>
             <Icon name="person" size={17} /><span>{session.user ? "Mi cuenta" : "Ingresar"}</span>
           </Link>
+          <ThemeToggle />
         </nav>
       </div>
     </header>
