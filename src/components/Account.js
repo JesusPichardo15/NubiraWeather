@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { DRAFT_KEY } from "@/lib/draft";
+import { useEvaluationDraft } from "./EvaluationDraft";
 import Icon from "./Icon";
 import { useSession } from "./SiteShell";
 
@@ -34,6 +34,7 @@ export function PasswordField({ id = "password", label = "Contraseña", fresh = 
 }
 
 function Profile({ user, setUser }) {
+  const { clearDraft } = useEvaluationDraft();
   const [result, setResult] = useState({});
   const [busy, setBusy] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -49,7 +50,7 @@ function Profile({ user, setUser }) {
         setResult({ message: "Perfil actualizado." });
       } else {
         setUser(null);
-        try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
+        clearDraft();
         if (action === "change-password") router.replace("/cuenta?actualizada=1");
         else router.replace("/");
       }
@@ -107,8 +108,9 @@ function Profile({ user, setUser }) {
   </div>;
 }
 
-export default function Account({ passwordChanged = false }) {
+export default function Account({ passwordChanged = false, continueEvaluation = false }) {
   const { user, ready, setUser } = useSession();
+  const { resumeDraft } = useEvaluationDraft();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -138,9 +140,7 @@ export default function Account({ passwordChanged = false }) {
       const response = await api(`account/${mode}`, { method: "POST", body });
       if (mode === "login") {
         setUser(response);
-        let draft = false;
-        try { draft = Boolean(sessionStorage.getItem(DRAFT_KEY)); } catch {}
-        router.replace(draft ? "/?restaurar=1" : "/eventos");
+        router.replace(continueEvaluation && resumeDraft() ? "/" : "/eventos");
       } else {
         setSent(true);
       }
@@ -162,6 +162,9 @@ export default function Account({ passwordChanged = false }) {
         <span className="tile-icon"><Icon name="mail" /></span>
         <h2>Revisa tu bandeja de entrada</h2>
         <p className="subtle">Si corresponde, recibirás un mensaje en <strong>{email}</strong>. Revisa también la carpeta de correo no deseado.</p>
+        {continueEvaluation && (mode === "register" || mode === "resend-verification") && <p className="subtle">
+          Si verificas el correo en otro navegador o dispositivo, vuelve a esta pestaña para iniciar sesión y retomar tu consulta.
+        </p>}
         <button className="button secondary" type="button" onClick={() => changeMode("login")}>Volver a iniciar sesión</button>
       </div> : <>
         {(mode === "login" || mode === "register") && <div className="account-tabs">

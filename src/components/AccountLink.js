@@ -4,17 +4,20 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { RESUME_ACCOUNT } from "@/lib/draft.mjs";
 import { PasswordField } from "./Account";
+import { useEvaluationDraft } from "./EvaluationDraft";
 import Icon from "./Icon";
 import { useSession } from "./SiteShell";
 
 export default function AccountLink({ verify }) {
   const { setUser } = useSession();
+  const { canResumeDraft } = useEvaluationDraft();
   const router = useRouter();
   const [known, setKnown] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState("");
+  const [done, setDone] = useState(null);
   const token = useRef(null);
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export default function AccountLink({ verify }) {
         router.replace("/cuenta?actualizada=1");
       } else {
         token.current = null;
-        setDone(response.message);
+        setDone({ message: response.message, resume: canResumeDraft() });
       }
     } catch (failure) {
       setError(failure.message);
@@ -60,7 +63,10 @@ export default function AccountLink({ verify }) {
       <p className="subtle">{verify ? "Elige una contraseña para activar tu cuenta." : "Elige una contraseña nueva. Tus sesiones anteriores se cerrarán."}</p>
     </div>
     <div className="card form-card">
-      {done ? <><p className="success-message" role="status">{done}</p><Link href="/cuenta" className="button primary">Ir a mi cuenta</Link></> :
+      {done ? <><p className="success-message" role="status">{done.message}</p>
+        <Link href={done.resume ? RESUME_ACCOUNT : "/cuenta"} className="button primary">
+          {done.resume ? "Iniciar sesión y retomar consulta" : "Ir a mi cuenta"}
+        </Link></> :
         !known ? <p role="status">Comprobando enlace…</p> :
         !token.current ? <><p className="form-error" role="alert">El enlace está incompleto. Solicita uno nuevo.</p>
           <Link className="button secondary" href="/cuenta">Volver a cuenta</Link></> :
@@ -73,6 +79,8 @@ export default function AccountLink({ verify }) {
           {error && <p className="form-error" role="alert">{error}</p>}
         </form>}
     </div>
-    <Link className="inline-link" href="/cuenta"><Icon name="back" size={17} /> Volver a cuenta</Link>
+    <Link className="inline-link" href={done?.resume ? RESUME_ACCOUNT : "/cuenta"}>
+      <Icon name="back" size={17} /> Volver a cuenta
+    </Link>
   </div>;
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import EvaluationDraftProvider from "./EvaluationDraft";
 import Icon from "./Icon";
 
 const Session = createContext(null);
@@ -46,7 +47,9 @@ export default function SiteShell({ children }) {
         </nav>
       </div>
     </header>
-    <main id="contenido" className="shell main" tabIndex={-1}>{children}</main>
+    <main id="contenido" className="shell main" tabIndex={-1}>
+      <EvaluationDraftProvider>{children}</EvaluationDraftProvider>
+    </main>
     <footer className="site-footer shell">
       <span className="footer-brand"><Icon name="cloud" size={19} /> Nubira Weather</span>
       <span>Estimaciones climatológicas para planificar con anticipación.</span>

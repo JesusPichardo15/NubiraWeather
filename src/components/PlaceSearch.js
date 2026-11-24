@@ -109,14 +109,15 @@ function AddressAutocomplete({ onPick, disabled, address, onAddressChange }) {
   </div>;
 }
 
-function ManualPlaceSearch({ onPick, disabled }) {
+function ManualPlaceSearch({ onPick, disabled, address, onAddressChange }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [options, setOptions] = useState(null);
+  const [open, setOpen] = useState(Boolean(address.text));
 
   async function submit(event) {
     event.preventDefault();
-    const query = new FormData(event.currentTarget).get("query").trim();
+    const query = address.text.trim();
     setBusy(true);
     setError("");
     setOptions(null);
@@ -129,12 +130,16 @@ function ManualPlaceSearch({ onPick, disabled }) {
     }
   }
 
-  return <details className="place-search">
+  return <details className="place-search" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary>Buscar una ciudad o lugar</summary>
     <form onSubmit={submit}>
       <label className="sr-only" htmlFor="place-query">Nombre del lugar</label>
       <div className="search-row">
-        <input id="place-query" name="query" minLength={3} maxLength={140} required placeholder="Ej. Delicias, Chihuahua" />
+        <input id="place-query" name="query" minLength={3} maxLength={140} required placeholder="Ej. Delicias, Chihuahua"
+          value={address.text} disabled={busy || disabled} onChange={({ target }) => {
+            setOptions(null);
+            onAddressChange(target.value);
+          }} />
         <button type="submit" className="button secondary" disabled={busy || disabled}>{busy ? "Buscando…" : "Buscar"}</button>
       </div>
       <p className="field-hint">La búsqueda se envía al proveedor de mapas. No incluyas datos privados.</p>
@@ -143,7 +148,10 @@ function ManualPlaceSearch({ onPick, disabled }) {
     {options?.length === 0 && <p className="field-hint" role="status">No encontramos coincidencias.</p>}
     {options?.length > 0 && <ul className="place-results" aria-label="Lugares encontrados">
       {options.map(({ lat, lon, label }, index) => <li key={`${lat}:${lon}:${index}`}>
-        <button className="link-button" type="button" disabled={disabled} onClick={() => { onPick(lat, lon); setOptions(null); }}>{label}</button>
+        <button className="link-button" type="button" disabled={disabled} onClick={() => {
+          onPick(lat, lon, undefined, label);
+          setOptions(null);
+        }}>{label}</button>
       </li>)}
     </ul>}
   </details>;
@@ -164,6 +172,7 @@ export function usePlaceSearchMode() {
 export default function PlaceSearch({ mode, onPick, disabled, address, onAddressChange }) {
   if (mode === "autocomplete") return <AddressAutocomplete onPick={onPick} disabled={disabled}
     address={address} onAddressChange={onAddressChange} />;
-  if (mode === "manual") return <ManualPlaceSearch onPick={onPick} disabled={disabled} />;
+  if (mode === "manual") return <ManualPlaceSearch onPick={onPick} disabled={disabled}
+    address={address} onAddressChange={onAddressChange} />;
   return null;
 }

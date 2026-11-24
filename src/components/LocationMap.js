@@ -35,7 +35,8 @@ function MapControls({ position, focus, onPick }) {
 }
 
 export default function LocationMap({ position, focus, onPick, onTileError, geoapifyAttribution }) {
-  return <MapContainer center={[23.6, -102.5]} zoom={5} scrollWheelZoom
+  const center = position ? [Math.max(-85, Math.min(85, position.lat)), position.lon] : [23.6, -102.5];
+  return <MapContainer center={center} zoom={position ? 8 : 5} scrollWheelZoom
     className="venue-map" aria-label="Mapa de ubicación del evento">
     <TileLayer url={tiles} attribution={osmAttribution + (geoapifyAttribution ? geoapifyAttributionText : "")}
       eventHandlers={{ tileerror: onTileError }} />

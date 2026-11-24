@@ -11,10 +11,15 @@ function targetDate() {
   return future.toISOString().slice(0, 10);
 }
 
-async function evaluate(page) {
+async function evaluate(page, venue) {
   await page.goto("/");
-  await page.getByLabel("Latitud", { exact: true }).fill("28.1901");
-  await page.getByLabel("Longitud", { exact: true }).fill("-105.4701");
+  if (venue) {
+    await page.getByRole("combobox", { name: "Dirección de la sede" }).fill("Sede de prueba");
+    await page.getByRole("option", { name: venue.label }).click();
+  } else {
+    await page.getByLabel("Latitud", { exact: true }).fill("28.1901");
+    await page.getByLabel("Longitud", { exact: true }).fill("-105.4701");
+  }
   await page.getByLabel("Fecha del evento").fill(targetDate());
   const pending = page.waitForResponse((r) => r.url().endsWith("/api/weather") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Evaluar riesgo" }).click();
@@ -35,31 +40,50 @@ async function verificationLink(email) {
   return "";
 }
 
-test("consulta real, confirma la cuenta, retoma la evaluación, guarda, renombra y elimina un evento", async ({ page }) => {
+test("consulta real, verifica en una pestaña nueva, retoma la evaluación y administra el evento", async ({ page: original, context }) => {
   test.skip(!mailDir, "Configura la bandeja local para verificar la entrega.");
-  const prediction = await evaluate(page);
+  const venue = { label: "Sede de prueba, Chihuahua", lat: 28.1901, lon: -105.4701, zoom: 15 };
+  await context.route("**/tile.openstreetmap.org/**", (route) => route.abort());
+  await context.route("**/api/places", (route) => route.fulfill({ json: { autocomplete: true, enabled: false } }));
+  await context.route("**/api/places/autocomplete", (route) => route.fulfill({ json: [venue] }));
+  const prediction = await evaluate(original, venue);
   const formattedRain = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2 }).format(prediction.probabilidad_lluvia_pct);
-  await expect(page.getByRole("heading", { name: "Riesgos para tu evento" })).toBeVisible();
-  await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Lluvia", exact: true }) })
+  await expect(original.getByRole("heading", { name: "Riesgos para tu evento" })).toBeVisible();
+  await expect(original.getByRole("article").filter({ has: original.getByRole("heading", { name: "Lluvia", exact: true }) })
     .locator(".risk-number")).toHaveText(`${formattedRain}%`);
-  await page.getByRole("link", { name: "Ingresar para guardar" }).click();
-  await page.getByRole("button", { name: "Registrarme" }).click();
-  await page.getByLabel("Nombre", { exact: true }).fill("Organizadora de prueba");
+  await original.getByRole("link", { name: "Ingresar para guardar" }).click();
+  await original.getByRole("button", { name: "Registrarme" }).click();
+  await original.getByLabel("Nombre", { exact: true }).fill("Organizadora de prueba");
   const email = `browser-${Date.now()}@example.com`;
-  await page.getByLabel("Correo electrónico").fill(email);
-  await page.getByRole("button", { name: "Enviar enlace" }).click();
-  await expect(page.getByText("Revisa tu bandeja de entrada")).toBeVisible();
+  await original.getByLabel("Correo electrónico").fill(email);
+  await original.getByRole("button", { name: "Enviar enlace" }).click();
+  await expect(original.getByText("Revisa tu bandeja de entrada")).toBeVisible();
   await expect.poll(() => verificationLink(email)).toContain("/cuenta/verificar");
+  const page = await context.newPage();
+  let repeatedEvaluations = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/weather")) repeatedEvaluations++;
+  });
   await page.goto(await verificationLink(email));
   await page.getByLabel("Elige tu contraseña").fill(password);
   await page.getByLabel("Confirma la contraseña").fill(password);
   await page.getByRole("button", { name: "Activar cuenta" }).click();
   await expect(page.getByText("Correo verificado. Ya puedes iniciar sesión.")).toBeVisible();
-  await page.getByRole("link", { name: "Ir a mi cuenta" }).click();
+  await page.getByRole("link", { name: "Iniciar sesión y retomar consulta" }).click();
   await page.getByLabel("Correo electrónico").fill(email);
   await page.getByLabel("Contraseña", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(page.getByRole("heading", { name: "Riesgos para tu evento" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Dirección de la sede" })).toHaveValue(venue.label);
+  await expect(page.getByLabel("Fecha del evento")).toHaveValue(prediction.fecha_objetivo);
+  await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Lluvia", exact: true }) })
+    .locator(".risk-number")).toHaveText(`${formattedRain}%`);
+  expect(repeatedEvaluations).toBe(0);
+  const unrelated = await context.newPage();
+  await unrelated.goto("/");
+  await expect(unrelated.getByRole("combobox", { name: "Dirección de la sede" })).toHaveValue("");
+  await expect(unrelated.getByRole("region", { name: "Resultados de la consulta" })).toHaveCount(0);
+  await unrelated.close();
   await page.getByRole("button", { name: "Guardar evento" }).click();
   await page.getByLabel("Nombre de tu evento").fill("Festival de prueba");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();

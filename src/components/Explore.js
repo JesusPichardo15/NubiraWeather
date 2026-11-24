@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { DRAFT_KEY } from "@/lib/draft";
+import { EMPTY_ADDRESS, RESUME_ACCOUNT } from "@/lib/draft.mjs";
 import { forecastInput, tomorrow, validPrediction } from "@/lib/weather.mjs";
 import ClimateResults from "./ClimateResults";
+import { useEvaluationDraft } from "./EvaluationDraft";
 import Icon from "./Icon";
 import PlaceSearch, { usePlaceSearchMode } from "./PlaceSearch";
 import { useSession } from "./SiteShell";
@@ -16,10 +17,9 @@ const LocationMap = dynamic(() => import("./LocationMap"), {
   ssr: false,
   loading: () => <div className="map-placeholder" role="status">Cargando mapa…</div>,
 });
-const EMPTY_ADDRESS = { text: "", phase: "idle" };
-
-function SaveEvaluation({ result, setNotice }) {
+function SaveEvaluation({ result }) {
   const { user, ready, setUser } = useSession();
+  const { beginHandoff } = useEvaluationDraft();
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,6 @@ function SaveEvaluation({ result, setNotice }) {
       const saved = await api("events", { method: "POST", body: {
         ...result.input, name: entries.get("name").trim(), alerts_enabled: entries.has("alerts"),
       } });
-      try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
       router.push(`/eventos/${saved.id}?guardado=1`);
     } catch (failure) {
       if (failure.status === 401) setUser(null);
@@ -43,19 +42,10 @@ function SaveEvaluation({ result, setNotice }) {
     }
   }
 
-  function keepDraft(event) {
-    try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(result));
-    } catch {
-      event.preventDefault();
-      setNotice("No se puede conservar la consulta en esta pestaña. Puedes iniciar sesión en otra pestaña y volver a consultar.");
-    }
-  }
-
   if (!ready) return null;
   if (!user) return <div className="save-area">
     {error && <p className="form-error" role="alert">{error}</p>}
-    <Link className="button secondary" href="/cuenta" onClick={keepDraft}><Icon name="bookmark" size={18} /> Ingresar para guardar</Link>
+    <Link className="button secondary" href={RESUME_ACCOUNT} onClick={beginHandoff}><Icon name="bookmark" size={18} /> Ingresar para guardar</Link>
   </div>;
 
   if (!showForm) return <button className="button secondary" type="button" onClick={() => setShowForm(true)}>
@@ -76,36 +66,19 @@ function SaveEvaluation({ result, setNotice }) {
 
 export default function Explore() {
   const placeMode = usePlaceSearchMode();
-  const [coords, setCoords] = useState({ lat: "", lon: "" });
-  const [address, setAddress] = useState(EMPTY_ADDRESS);
+  const { draft: { coords, address, date, focus, result }, restored, updateDraft } = useEvaluationDraft();
   const [mapPoint, setMapPoint] = useState(null);
-  const [date, setDate] = useState("");
   const [minDate, setMinDate] = useState("");
-  const [focus, setFocus] = useState(null);
   const [tileError, setTileError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [result, setResult] = useState(null);
   const resultAnchor = useRef(null);
   const reverseRequest = useRef(null);
+  const weatherRequest = useRef(null);
 
   useEffect(() => {
     setMinDate(tomorrow());
-    if (new URLSearchParams(location.search).get("restaurar") !== "1") return;
-    try {
-      const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY));
-      if (validPrediction(draft?.data)) {
-        const { latitud, longitud, fecha_objetivo } = draft.data;
-        const input = forecastInput(latitud, longitud, fecha_objetivo);
-        setResult({ input, data: draft.data });
-        setCoords({ lat: String(latitud), lon: String(longitud) });
-        setDate(fecha_objetivo);
-        setFocus({ lat: latitud, lon: longitud });
-      }
-    } catch {
-      setNotice("No se pudo recuperar la consulta anterior. Puedes hacer una nueva.");
-    }
+    return () => weatherRequest.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -126,59 +99,63 @@ export default function Explore() {
         // An absent address or provider error must not change the selected point.
       }
       if (controller.signal.aborted) return;
-      setAddress(label ? { text: label, phase: "resolved" } : { text: "", phase: "unavailable" });
+      updateDraft({ address: label ? { text: label, phase: "resolved" } : { text: "", phase: "unavailable" } });
     }, 250);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [mapPoint, placeMode]);
+  }, [mapPoint, placeMode, updateDraft]);
 
   function cancelReverse() {
     reverseRequest.current?.abort();
     setMapPoint(null);
   }
 
-  function setPoint(lat, lon) {
-    setCoords({ lat: lat.toFixed(6), lon: lon.toFixed(6) });
+  function setPoint(lat, lon, nextAddress, nextFocus) {
+    updateDraft({
+      coords: { lat: lat.toFixed(6), lon: lon.toFixed(6) },
+      address: nextAddress, focus: nextFocus, result: null,
+    });
     setFormError("");
   }
 
   function pickMap(lat, lon) {
     if (busy) return;
     cancelReverse();
-    setPoint(lat, lon);
+    setPoint(lat, lon, EMPTY_ADDRESS, null);
     setMapPoint({ lat, lon });
-    setAddress({ text: "", phase: "loading" });
   }
 
   function pickAddress(lat, lon, zoom, label) {
     if (busy) return;
     cancelReverse();
-    setPoint(lat, lon);
-    setFocus({ lat, lon, zoom });
-    setAddress(label ? { text: label, phase: "selected" } : EMPTY_ADDRESS);
+    setPoint(lat, lon, label ? { text: label, phase: "selected" } : EMPTY_ADDRESS, { lat, lon, zoom });
   }
 
   function editAddress(text) {
     cancelReverse();
-    setAddress({ text, phase: "typing" });
+    updateDraft({ address: { text, phase: "typing" } });
   }
 
   function editCoordinate(name, value) {
     cancelReverse();
-    setAddress((previous) => previous.phase === "typing" ? previous : EMPTY_ADDRESS);
-    setCoords((previous) => ({ ...previous, [name]: value }));
+    updateDraft((previous) => ({
+      coords: { ...previous.coords, [name]: value },
+      address: previous.address.phase === "typing" ? previous.address : EMPTY_ADDRESS,
+      focus: null, result: null,
+    }));
   }
 
   const lat = Number(coords.lat), lon = Number(coords.lon);
   const position = coords.lat.trim() && coords.lon.trim() && Number.isFinite(lat) && Number.isFinite(lon) &&
     Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+  const visibleAddress = placeMode === "autocomplete" && mapPoint && address.phase === "idle" ?
+    { text: "", phase: "loading" } : address;
 
   async function run(event) {
     event.preventDefault();
     setFormError("");
-    setNotice("");
     let input;
     try {
       input = forecastInput(coords.lat, coords.lon, date);
@@ -187,20 +164,22 @@ export default function Explore() {
       return;
     }
     setBusy(true);
-    setResult(null);
-    setFocus({ lat: input.latitude, lon: input.longitude });
-    try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
+    weatherRequest.current?.abort();
+    const controller = new AbortController();
+    weatherRequest.current = controller;
+    updateDraft({ result: null, focus: { lat: input.latitude, lon: input.longitude } });
     try {
-      const data = await api("weather", { method: "POST", body: input });
+      const data = await api("weather", { method: "POST", body: input, signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (!validPrediction(data) || data.fecha_objetivo !== date ||
           data.latitud !== input.latitude || data.longitud !== input.longitude) {
         throw new Error("El servicio devolvió una evaluación incompleta o para otra ubicación o fecha.");
       }
-      setResult({ input, data });
+      updateDraft({ result: { input, data } });
     } catch (error) {
-      setFormError(error.message);
+      if (!controller.signal.aborted) setFormError(error.message);
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   }
 
@@ -223,9 +202,10 @@ export default function Explore() {
         <p className="eyebrow"><Icon name="pin" size={17} /> Nueva evaluación</p>
         <h2 id="query-heading">Lugar y fecha</h2>
         <p className="subtle">Elige el punto en el mapa o escribe las coordenadas de tu sede.</p>
-        <PlaceSearch mode={placeMode} disabled={busy} onPick={pickAddress} address={address} onAddressChange={editAddress} />
+        <PlaceSearch mode={placeMode} disabled={busy || !restored} onPick={pickAddress}
+          address={visibleAddress} onAddressChange={editAddress} />
         <form onSubmit={run}>
-          <fieldset disabled={busy}>
+          <fieldset disabled={busy || !restored}>
             <div className="field-row">
               <div className="field">
                 <label htmlFor="lat">Latitud</label>
@@ -241,7 +221,7 @@ export default function Explore() {
             <div className="field">
               <label htmlFor="target-date">Fecha del evento</label>
               <input id="target-date" type="date" min={minDate || undefined} required value={date}
-                aria-describedby="date-hint" onChange={({ target }) => setDate(target.value)} />
+                aria-describedby="date-hint" onChange={({ target }) => updateDraft({ date: target.value, result: null })} />
               <p id="date-hint" className="field-hint">Elige una fecha posterior a hoy (UTC).</p>
             </div>
             <button type="submit" className="button primary large">
@@ -254,17 +234,16 @@ export default function Explore() {
         <p className="privacy-hint"><Icon name="info" size={17} /> No necesitas una cuenta para consultar.</p>
       </div>
       <div className="workspace-map" role="region" aria-label="Mapa de ubicación del evento">
-        <LocationMap position={position} focus={focus} onPick={pickMap} onTileError={() => setTileError(true)}
-          geoapifyAttribution={placeMode === "autocomplete"} />
+        {restored && <LocationMap position={position} focus={focus} onPick={pickMap} onTileError={() => setTileError(true)}
+          geoapifyAttribution={placeMode === "autocomplete"} />}
         <div className="map-caption"><Icon name="pin" size={17} />
           <span>{tileError ? "Hay teselas no disponibles. Puedes usar las coordenadas manuales." :
             position ? `Ubicación: ${lat.toFixed(4)}, ${lon.toFixed(4)}` : "Selecciona un punto en el mapa"}</span>
         </div>
       </div>
     </section>
-    {notice && <p className="form-error" role="status">{notice}</p>}
     {result && <div className="results-anchor" ref={resultAnchor} tabIndex={-1} role="region" aria-label="Resultados de la consulta">
-      <ClimateResults data={result.data} controls={<SaveEvaluation result={result} setNotice={setNotice} />} />
+      <ClimateResults data={result.data} controls={<SaveEvaluation result={result} />} />
     </div>}
   </>;
 }
